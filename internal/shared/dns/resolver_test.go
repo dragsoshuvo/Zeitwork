@@ -211,3 +211,30 @@ func TestNetResolver_LookupTXT_MultipleRecords(t *testing.T) {
 		t.Fatalf("expected to find 'abc123token' in TXT records: %#v", records)
 	}
 }
+
+func TestNetResolver_DeduplicatesIPv6(t *testing.T) {
+	resolver := &netResolver{
+		maxDepth: 5,
+		lookupCNAME: func(ctx context.Context, host string) (string, error) {
+			return "", errors.New("no cname")
+		},
+		lookupIP: func(ctx context.Context, host string) ([]net.IPAddr, error) {
+			return []net.IPAddr{
+				{IP: net.ParseIP("2001:db8::1")},
+				{IP: net.ParseIP("2001:db8::1")},
+				{IP: net.ParseIP("2001:db8::2")},
+			}, nil
+		},
+		lookupTXT: func(ctx context.Context, name string) ([]string, error) {
+			return nil, errors.New("no txt")
+		},
+	}
+
+	result, err := resolver.Resolve(context.Background(), "app.example.com")
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if len(result.IPv6) != 2 {
+		t.Fatalf("expected two unique ipv6 addresses, got %#v", result.IPv6)
+	}
+}
